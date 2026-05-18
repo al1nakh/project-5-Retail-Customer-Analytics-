@@ -33,13 +33,12 @@ class Client:
         self.loyalty_score = loyalty_score
         self.purchase_frequency = purchase_frequency
         self.returns_count = returns_count
-        self._cache = {}
+        self._cache = {} # Задача 6: Кэш (словарь) для мемоизации вычислений
 
     def value(self):
         """Возвращает оценку ценности клиента (Total Spent * Loyalty Score)."""
         if 'value' in self._cache:
             return self._cache['value']
-        print(f"   [Расчет] Считаем value для {self.customer_id}...")
         result = self.total_spent * self.loyalty_score
         self._cache['value'] = result
         return result
@@ -57,7 +56,7 @@ class VIPClient(Client):
         self.vip_status = vip_status
 
     def value(self):
-        return super().value() * CONFIG['vip_bonus_coeff']
+        return super().value() * CONFIG['vip_bonus_coeff'] # Используем коэффициент из CONFIG (Задача 8)
 
 
 # task5 (Фабрика)
@@ -81,25 +80,26 @@ class ClientFactory:
                 returns_count=row['returns_count']
             )
 
+# task4
+class ScoringStrategy(ABC):
+    @abstractmethod
+    def calculate(self, client):
+        pass
 
-# Применение Фабрики для Задачи 1
-data_path_for_task1 = '../data/retail_customer_loyalty_realistic.csv'
-if os.path.exists(data_path_for_task1):
-    df = pd.read_csv(data_path_for_task1)
-    subset = df.head(20)
-    clients_list = []
-    for _, row in subset.iterrows():
-        # ИЗМЕНЕНО: Объекты создаются централизованно через Фабрику
-        clients = ClientFactory.create_client(row)
-        clients_list.append(clients)
 
-    print(f"\n{'Customer ID':<15} | {'Value (Total*Score)':<20} | {'Risk':<10}")
-    print("-" * 50)
-    for c in clients_list:
-        print(f"{c.customer_id:<15} | {c.value():<20.2f} | {c.risk():<10.4f}")
-    print()
-else:
-    logging.warning(f"Файл {data_path_for_task1} не найден для проверки Задачи 1.")
+class SpendStrategy(ScoringStrategy):
+    def calculate(self, client):
+        return client.total_spent
+
+
+class LoyaltyStrategy(ScoringStrategy):
+    def calculate(self, client):
+        return client.loyalty_score
+
+
+class EngagementStrategy(ScoringStrategy):
+    def calculate(self, client):
+        return client.purchase_frequency - client.returns_count
 
 
 # 2 task
@@ -107,7 +107,7 @@ class RetailAnalytics:
     def __init__(self, file_path):
         self.file_path = file_path
         self.df = None
-        self.clients = []
+        self.clients_objects = []
         logging.info("Инициализация класса RetailAnalytics.")
 
     def load_data(self):
@@ -182,164 +182,156 @@ class RetailAnalytics:
         logging.info(f"--- 5. Результаты успешно экспортированы в файл: {output_path} ---")
         return self
 
-path_to_csv = '../data/retail_customer_loyalty_realistic.csv'
-logging.info("--- ЗАПУСК ТЕСТА ЗАДАЧИ №2 ---")
-analytics = RetailAnalytics(path_to_csv)
-analytics.load_data()
-analytics.clean_data()
-print("\nБазовая статистика по ключевым метрикам:")
-print(analytics.basic_stats(), "\n")
+    # =========================================================
+    # ЗАДАЧА 10 — ПОЛНЫЙ ФИНАЛЬНЫЙ ПАЙПЛАЙН (АРХИТЕКТУРА PRODUCTION)
+    # =========================================================
+    def run_full_pipeline(self, output_filename='final_production_report.csv'):
+        """Объединяет все шаги, паттерны проектирования и выводит итоговые метрики."""
+        logging.info("=== ЗАПУСК ФИНАЛЬНОЙ АРХИТЕКТУРНОЙ СИСТЕМЫ (ЗАДАЧА №10) ===")
 
-logging.info("--- ЗАПУСК ПОЛНОГО PIPELINE (ЗАДАЧА №3) ---")
-pipeline_analytics = RetailAnalytics(path_to_csv)
-pipeline_analytics.load_data() \
-    .clean_data() \
-    .feature_engineering() \
-    .filter_high_value_clients(min_value=CONFIG['vip_threshold']) \
-    .export_results('final_vip_report.csv')
+        # 1. Загрузка и Валидация -> Очистка -> Сбор признаков
+        self.load_data()
+        self.clean_data()
 
+        # 2. Создание объектов через Фабрику (Задача 5)
+        logging.info("Генерация ООП-объектов клиентов через ClientFactory...")
+        for _, row in self.df.iterrows():
+            client_obj = ClientFactory.create_client(row)
+            self.clients_objects.append(client_obj)
 
-# task4
-class ScoringStrategy(ABC):
-    @abstractmethod
-    def calculate(self, client):
-        pass
+        # 3. Анализ с использованием Стратегий (Задача 4) и Кэша (Задача 6)
+        logging.info("Применение аналитических стратегий оценки...")
+        spend_strat = SpendStrategy()
 
+        # Посчитаем общую сумму ценности всех клиентов на базе объектов
+        total_system_value = sum(c.value() for c in self.clients_objects)
 
-class SpendStrategy(ScoringStrategy):
-    def calculate(self, client):
-        return client.total_spent
+        # 4. Фильтрация и экспорт данных
+        self.feature_engineering()
+        self.filter_high_value_clients(min_value=CONFIG['vip_threshold'])
+        self.export_results(output_filename)
 
+        # 5. Вывод итоговых метрик для бизнеса
+        print("\n" + "=" * 50)
+        print("     ИТОГОВЫЙ ОТЧЕТ АНАЛИТИЧЕСКОЙ СИСТЕМЫ")
+        print("=" * 50)
+        print(f" Всего обработано клиентов:          {len(self.clients_objects)}")
+        print(f" Из них отфильтровано как VIP:       {len(self.df)}")
+        print(f" Общая суммарная ценность (с кэшем):  {total_system_value:,.2f}")
+        print(f" Файл с результатами сохранен как:   {output_filename}")
+        print("=" * 50 + "\n")
+        return self
 
-class LoyaltyStrategy(ScoringStrategy):
-    def calculate(self, client):
-        return client.loyalty_score
+    # =========================================================
+    # ТОЧКА ВХОДА (ЗАПУСК ВСЕХ ТЕСТОВ И ФИНАЛЬНОГО ПАЙПЛАЙНА)
+    # =========================================================
+if __name__ == "__main__":
+    path_to_csv = '../data/retail_customer_loyalty_realistic.csv'
 
+    # Подготовка глобального списка клиентов clients_list для тестов Задач 4, 5, 6
+    if os.path.exists(path_to_csv):
+        df_temp = pd.read_csv(path_to_csv).head(20)
+        clients_list = [ClientFactory.create_client(row) for _, row in df_temp.iterrows()]
+    else:
+        clients_list = []
 
-class EngagementStrategy(ScoringStrategy):
-    def calculate(self, client):
-        return client.purchase_frequency - client.returns_count
+    # --- ТЕСТ ЗАДАЧИ №2 ---
+    logging.info("--- ЗАПУСК ТЕСТА ЗАДАЧИ №2 ---")
+    analytics = RetailAnalytics(path_to_csv)
+    analytics.load_data()
+    analytics.clean_data()
+    print("\nБазовая статистика по ключевым метрикам:")
+    print(analytics.basic_stats(), "\n")
 
+    # --- ТЕСТ ЗАДАЧИ №3 ---
+    logging.info("--- ЗАПУСК ПОЛНОГО PIPELINE (ЗАДАЧА №3) ---")
+    pipeline_analytics = RetailAnalytics(path_to_csv)
+    pipeline_analytics.load_data() \
+        .clean_data() \
+        .feature_engineering() \
+        .filter_high_value_clients(min_value=CONFIG['vip_threshold']) \
+        .export_results('final_vip_report.csv')
 
-# =========================================================
-# Тестирование Задачи 4 — Паттерн Стратегия
-# =========================================================
-logging.info("--- ЗАПУСК ТЕСТА ЗАДАЧИ №4 (ПАТТЕРН СТРАТЕГИЯ) ---")
+    # --- ТЕСТ ЗАДАЧИ №4 (ПАТТЕРН СТРАТЕГИЯ) ---
+    logging.info("--- ЗАПУСК ТЕСТА ЗАДАЧИ №4 (ПАТТЕРН СТРАТЕГИЯ) ---")
+    if clients_list:
+        test_client = clients_list[0]
+        spend_strategy = SpendStrategy()
+        loyalty_strategy = LoyaltyStrategy()
+        engagement_strategy = EngagementStrategy()
 
-spend_strategy = SpendStrategy()
-loyalty_strategy = LoyaltyStrategy()
-engagement_strategy = EngagementStrategy()
+        print(f"\nПроверка стратегий для клиента: {test_client.customer_id}")
+        print("-" * 65)
+        current_strategy = spend_strategy
+        print(f"Выбрана SpendStrategy      -> Оценка клиента: {current_strategy.calculate(test_client):.2f}")
+        current_strategy = loyalty_strategy
+        print(f"Выбрана LoyaltyStrategy    -> Оценка клиента: {current_strategy.calculate(test_client):.2f}")
+        current_strategy = engagement_strategy
+        print(f"Выбрана EngagementStrategy -> Оценка клиента: {current_strategy.calculate(test_client):.2f}")
+        print("-" * 65 + "\n")
+    else:
+        logging.warning("Список clients_list пуст. Тест стратегий пропущен.")
 
-if clients_list:
-    test_client = clients_list[0]
+    # --- ТЕСТ ЗАДАЧИ №5 (ПАТТЕРН ФАБРИКА) ---
+    logging.info("--- ЗАПУСК ТЕСТА ЗАДАЧИ №5 (ПАТТЕРН ФАБРИКА) ---")
+    if clients_list:
+        print(f"{'Customer ID':<15} | {'Распределенный тип класса фабрикой':<40}")
+        print("-" * 60)
+        for c in clients_list[:10]:
+            class_type = "VIPClient (Премиум)" if isinstance(c, VIPClient) else "Client (Обычный)"
+            print(f"{c.customer_id:<15} | {class_type:<40}")
+        print("-" * 60 + "\n")
 
-    print(f"\nПроверка стратегий для клиента: {test_client.customer_id}")
-    print(
-        f"Исходные данные: Потрачено={test_client.total_spent}, Лояльность={test_client.loyalty_score}, Частота={test_client.purchase_frequency}, Возвраты={test_client.returns_count}")
-    print("-" * 65)
+    # --- ТЕСТ ЗАДАЧИ №6 (КЭШИРОВАНИЕ) ---
+    logging.info("--- ЗАПУСК ТЕСТА ЗАДАЧИ №6 (КЭШИРОВАНИЕ) ---")
+    if clients_list:
+        cache_client = clients_list[0]
+        print(f"Тестируем кэширование на клиенте: {cache_client.customer_id}\n")
 
-    current_strategy = spend_strategy
-    print(f"Выбрана SpendStrategy      -> Оценка клиента: {current_strategy.calculate(test_client):.2f}")
+        start_time = time.perf_counter()
+        val1 = cache_client.value()
+        first_call_time = time.perf_counter() - start_time
+        print(f"1-й вызов (Расчет): Результат = {val1:.2f}, Время = {first_call_time:.8f} сек.")
+        print("-" * 60)
 
-    current_strategy = loyalty_strategy
-    print(f"Выбрана LoyaltyStrategy    -> Оценка клиента: {current_strategy.calculate(test_client):.2f}")
+        start_time = time.perf_counter()
+        val2 = cache_client.value()
+        second_call_time = time.perf_counter() - start_time
+        print(f"2-й вызов (Из кэша): Результат = {val2:.2f}, Время = {second_call_time:.8f} сек.")
+        print("-" * 60 + "\n")
 
-    current_strategy = engagement_strategy
-    print(f"Выбрана EngagementStrategy -> Оценка клиента: {current_strategy.calculate(test_client):.2f}")
-    print("-" * 65 + "\n")
-else:
-    logging.warning("Список clients_list пуст. Невозможно протестировать стратегии.")
-
-# =========================================================
-# Тестирование Задачи 5 — Паттерн Фабрика
-# =========================================================
-logging.info("--- ЗАПУСК ТЕСТА ЗАДАЧИ №5 (ПАТТЕРН ФАБРИКА) ---")
-if clients_list:
-    print(f"{'Customer ID':<15} | {'Распределенный тип класса фабрикой':<40}")
-    print("-" * 60)
-    for c in clients_list[:10]:  # Посмотрим первые 10 для наглядности
-        class_type = "VIPClient (Премиум)" if isinstance(c, VIPClient) else "Client (Обычный)"
-        print(f"{c.customer_id:<15} | {class_type:<40}")
+    # --- ТЕСТ ЗАДАЧИ №8 (КОНФИГУРАЦИЯ) ---
+    logging.info("--- ЗАПУСК ТЕСТА ЗАДАЧИ №8 (КОНФИГУРАЦИЯ) ---")
+    print(f"Текущая конфигурация системы:")
+    print(f" - Порог перевода фабрикой в VIP (Лояльность): > {CONFIG['factory_vip_loyalty']}")
+    print(f" - Бонусный коэффициент для VIP-клиентов: {CONFIG['vip_bonus_coeff']}")
+    print(f" - Минимальный порог фильтрации для отчета: {CONFIG['vip_threshold']}")
     print("-" * 60 + "\n")
 
-#task6
-# =========================================================
-# Тестирование Задачи 6 — Кэширование (Мемоизация)
-# =========================================================
-logging.info("--- ЗАПУСК ТЕСТА ЗАДАЧИ №6 (КЭШИРОВАНИЕ) ---")
+    # --- ТЕСТ ЗАДАЧИ №9 (ВАЛИДАЦИЯ ДАННЫХ) ---
+    logging.info("--- ЗАПУСК ТЕСТА ЗАДАЧИ №9 (ВАЛИДАЦИЯ ДАННЫХ) ---")
+    bad_data = pd.DataFrame({
+        'customer_id': ['CUST001', None, 'CUST003'],
+        'total_spent': [5000.0, 1200.0, -150.0],
+        'loyalty_score': [70, 50, 20],
+        'purchase_frequency': [15, 10, 5],
+        'returns_count': [1, 0, 2]
+    })
 
-if clients_list:
-    cache_client = clients_list[0]
-    print(f"Тестируем кэширование на клиенте: {cache_client.customer_id}\n")
+    print("Тестируем симуляцию проверки плохих данных:")
+    try:
+        if bad_data['customer_id'].isnull().any():
+            raise ValueError("Критическая ошибка: В данных обнаружен пустой Customer ID!")
+    except ValueError as e:
+        print(f" [ПЕРЕХВАЧЕНО] Перехвачена системная ошибка: {e}")
 
-    # --- ПЕРВЫЙ ВЫЗОВ (Кэш пустой, должен пойти реальный расчет) ---
-    start_time = time.perf_counter()
-    val1 = cache_client.value()
-    end_time = time.perf_counter()
-    first_call_time = end_time - start_time
-    print(f"1-й вызов (Расчет): Результат = {val1:.2f}, Время = {first_call_time:.8f} сек.")
-    print("-" * 60)
-
-    # --- ВТОРОЙ ВЫЗОВ (Значение уже в кэше, расчет идти НЕ должен) ---
-    start_time = time.perf_counter()
-    val2 = cache_client.value()
-    end_time = time.perf_counter()
-    second_call_time = end_time - start_time
-    print(f"2-й вызов (Из кэша): Результат = {val2:.2f}, Время = {second_call_time:.8f} сек.")
-    print("-" * 60)
-
-    # Проверка эффективности
-    if first_call_time > 0:
-        acceleration = first_call_time / (second_call_time if second_call_time > 0 else 1e-9)
-        print(f"Успех! Повторный вызов из кэша отработал мгновенно.")
+    try:
+        if (bad_data['total_spent'] < 0).any():
+            raise ValueError("Критическая ошибка: Сумма расходов не может быть отрицательной!")
+    except ValueError as e:
+        print(f" [ПЕРЕХВАЧЕНО] Перехвачена системная ошибка: {e}")
     print("-" * 60 + "\n")
-else:
-    logging.warning("Список клиентов пуст. Тест кэширования отменен.")
 
-
-# =========================================================
-# Тестирование Задачи 8 — Параметризация через CONFIG
-# =========================================================
-logging.info("--- ЗАПУСК ТЕСТА ЗАДАЧИ №8 (КОНФИГУРАЦИЯ) ---")
-print(f"Текущая конфигурация системы:")
-print(f" - Порог перевода фабрикой в VIP (Лояльность): > {CONFIG['factory_vip_loyalty']}")
-print(f" - Бонусный коэффициент для VIP-клиентов: {CONFIG['vip_bonus_coeff']}")
-print(f" - Минимальный порог фильтрации для отчета: {CONFIG['vip_threshold']}")
-print("-" * 60 + "\n")
-
-#task9
-# =========================================================
-# Тестирование Задачи 9 — Валидация данных (Validation)
-# =========================================================
-logging.info("--- ЗАПУСК ТЕСТА ЗАДАЧИ №9 (ВАЛИДАЦИЯ ДАННЫХ) ---")
-
-# Создадим маленькую "плохую" таблицу, чтобы проверить, как код ловит ошибки
-bad_data = pd.DataFrame({
-    'customer_id': ['CUST001', None, 'CUST003'],  # ТУТ ПУСТОЙ ID!
-    'total_spent': [5000.0, 1200.0, -150.0],  # ТУТ ОТРИЦАТЕЛЬНЫЕ ДЕНЬГИ!
-    'loyalty_score': [70, 50, 20],
-    'purchase_frequency': [15, 10, 5],
-    'returns_count': [1, 0, 2]
-})
-
-print("Тестируем симуляцию проверки плохих данных:")
-try:
-    # Пытаемся запустить валидацию вручную на плохих данных
-    print(" 1. Проверяем customer_id на наличие пустых строк...")
-    if bad_data['customer_id'].isnull().any():
-        raise ValueError("Критическая ошибка: В данных обнаружен пустой Customer ID!")
-
-except ValueError as e:
-    # Наш код успешно поймал ошибку! Выводим её на экран
-    print(f" [ПЕРЕХВАЧЕНО] Перехвачена системная ошибка: {e}")
-
-try:
-    print(" 2. Проверяем колонку total_spent на отрицательные числа...")
-    if (bad_data['total_spent'] < 0).any():
-        raise ValueError("Критическая ошибка: Сумма расходов (total_spent) не может быть отрицательной!")
-
-except ValueError as e:
-    print(f" [ПЕРЕХВАЧЕНО] Перехвачена системная ошибка: {e}")
-
-print("-" * 60 + "\n")
-
+    # --- ФИНАЛЬНЫЙ ЗАПУСК ЗАДАЧИ №10 (ПОЛНЫЙ ПАЙПЛАЙН) ---
+    final_system = RetailAnalytics(path_to_csv)
+    final_system.run_full_pipeline('final_production_report.csv')
