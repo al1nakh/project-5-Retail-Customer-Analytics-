@@ -114,7 +114,26 @@ class RetailAnalytics:
         if not os.path.exists(self.file_path):
             logging.error(f'Ошибка: файл {self.file_path} не найден')
             return self
+
         self.df = pd.read_csv(self.file_path)
+
+        # Задача 9 — Валидация данных перед началом работы
+        # 1. Проверяем, нет ли пустых значений в колонке customer_id
+        if self.df['customer_id'].isnull().any():
+            # Находим количество пустых строк для вывода в ошибку
+            empty_count = self.df['customer_id'].isnull().sum()
+            raise ValueError(f"Критическая ошибка валидации: обнаружено {empty_count} пустых значений в customer_id!")
+
+        # 2. Проверяем, нет ли отрицательных значений в численных колонках
+        # Проверим расходы, баллы лояльности и частоту покупок
+        numeric_cols = ['total_spent', 'loyalty_score', 'purchase_frequency', 'returns_count']
+        for col in numeric_cols:
+            if (self.df[col] < 0).any():
+                negative_count = (self.df[col] < 0).sum()
+                raise ValueError(
+                    f"Критическая ошибка валидации: в колонке '{col}' найдено {negative_count} отрицательных значений!")
+
+        logging.info("--- Валидация успешна: пустых ID и отрицательных значений не обнаружено! ---")
         logging.info(f"--- Данные загружены. Всего строк: {len(self.df)} ---")  # Исправлено на INFO
         return self
 
@@ -287,3 +306,40 @@ print(f" - Порог перевода фабрикой в VIP (Лояльнос
 print(f" - Бонусный коэффициент для VIP-клиентов: {CONFIG['vip_bonus_coeff']}")
 print(f" - Минимальный порог фильтрации для отчета: {CONFIG['vip_threshold']}")
 print("-" * 60 + "\n")
+
+#task9
+# =========================================================
+# Тестирование Задачи 9 — Валидация данных (Validation)
+# =========================================================
+logging.info("--- ЗАПУСК ТЕСТА ЗАДАЧИ №9 (ВАЛИДАЦИЯ ДАННЫХ) ---")
+
+# Создадим маленькую "плохую" таблицу, чтобы проверить, как код ловит ошибки
+bad_data = pd.DataFrame({
+    'customer_id': ['CUST001', None, 'CUST003'],  # ТУТ ПУСТОЙ ID!
+    'total_spent': [5000.0, 1200.0, -150.0],  # ТУТ ОТРИЦАТЕЛЬНЫЕ ДЕНЬГИ!
+    'loyalty_score': [70, 50, 20],
+    'purchase_frequency': [15, 10, 5],
+    'returns_count': [1, 0, 2]
+})
+
+print("Тестируем симуляцию проверки плохих данных:")
+try:
+    # Пытаемся запустить валидацию вручную на плохих данных
+    print(" 1. Проверяем customer_id на наличие пустых строк...")
+    if bad_data['customer_id'].isnull().any():
+        raise ValueError("Критическая ошибка: В данных обнаружен пустой Customer ID!")
+
+except ValueError as e:
+    # Наш код успешно поймал ошибку! Выводим её на экран
+    print(f" [ПЕРЕХВАЧЕНО] Перехвачена системная ошибка: {e}")
+
+try:
+    print(" 2. Проверяем колонку total_spent на отрицательные числа...")
+    if (bad_data['total_spent'] < 0).any():
+        raise ValueError("Критическая ошибка: Сумма расходов (total_spent) не может быть отрицательной!")
+
+except ValueError as e:
+    print(f" [ПЕРЕХВАЧЕНО] Перехвачена системная ошибка: {e}")
+
+print("-" * 60 + "\n")
+
