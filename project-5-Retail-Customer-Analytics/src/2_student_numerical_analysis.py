@@ -7,7 +7,7 @@ file_path = os.path.join(base_dir, 'retail_customer_loyalty_realistic.csv')
 
 df = pd.read_csv(file_path)
 
-# 1-тапсырма: DataFrame-ті сандық NumPy массивтеріне айналдыру және оның құрылымын тексеру.
+# 1-тапсырма: DataFrame-ті сандық NumPy массивтеріне айналдыру және оның құрылымын тексеру
 numeric_cols = [
     'age', 'total_spent', 'avg_purchase_value', 'loyalty_score',
     'purchase_frequency', 'returns_count', 'store_visits_per_month',
