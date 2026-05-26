@@ -115,23 +115,27 @@ class RetailAnalytics:
             logging.error(f'Ошибка: файл {self.file_path} не найден')
             return self
 
-        self.df = pd.read_csv(self.file_path)
+        self.df = pd.read_csv(self.file_path, low_memory=False)
+
+        #  Проверяем, нет ли отрицательных значений в численных колонках
+        # Проверим расходы, баллы лояльности и частоту покупок
+        numeric_cols = ['total_spent', 'loyalty_score', 'purchase_frequency', 'returns_count']
+        for col in numeric_cols:
+            if col in self.df.columns:
+                # Превращаем строки в NaN, а NaN заменяем на 0
+                self.df[col] = pd.to_numeric(self.df[col], errors='coerce').fillna(0)
 
         # Задача 9 — Валидация данных перед началом работы
         # 1. Проверяем, нет ли пустых значений в колонке customer_id
         if self.df['customer_id'].isnull().any():
-            # Находим количество пустых строк для вывода в ошибку
             empty_count = self.df['customer_id'].isnull().sum()
             raise ValueError(f"Критическая ошибка валидации: обнаружено {empty_count} пустых значений в customer_id!")
 
-        # 2. Проверяем, нет ли отрицательных значений в численных колонках
-        # Проверим расходы, баллы лояльности и частоту покупок
-        numeric_cols = ['total_spent', 'loyalty_score', 'purchase_frequency', 'returns_count']
+        #2. Проверяем, нет ли отрицательных значений в численных колонках
         for col in numeric_cols:
             if (self.df[col] < 0).any():
                 negative_count = (self.df[col] < 0).sum()
-                raise ValueError(
-                    f"Критическая ошибка валидации: в колонке '{col}' найдено {negative_count} отрицательных значений!")
+                raise ValueError(f"Критическая ошибка валидации: в колонке '{col}' найдено {negative_count} отрицательных значений!")
 
         logging.info("--- Валидация успешна: пустых ID и отрицательных значений не обнаружено! ---")
         logging.info(f"--- Данные загружены. Всего строк: {len(self.df)} ---")  # Исправлено на INFO
@@ -231,6 +235,12 @@ if __name__ == "__main__":
     # Подготовка глобального списка клиентов clients_list для тестов Задач 4, 5, 6
     if os.path.exists(path_to_csv):
         df_temp = pd.read_csv(path_to_csv).head(20)
+
+        # ОЧИСТКА ТИПОВ ДАННЫХ (Защита от TypeError):
+        for col in ['total_spent', 'loyalty_score', 'purchase_frequency', 'returns_count']:
+            if col in df_temp.columns:
+                df_temp[col] = pd.to_numeric(df_temp[col], errors='coerce').fillna(0)
+
         clients_list = [ClientFactory.create_client(row) for _, row in df_temp.iterrows()]
     else:
         clients_list = []
