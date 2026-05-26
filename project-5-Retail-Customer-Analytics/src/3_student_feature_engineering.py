@@ -109,23 +109,4 @@ def run_feature_engineering():
         total_spent_sum = df['total_spent'].sum()
         df['weighted_loyalty'] = df['loyalty_score'] * (df['total_spent'] / total_spent_sum)
 
-        print("Топ-10 клиентов по weighted_loyalty:")
-        print(df[['customer_id', 'weighted_loyalty']].sort_values(by='weighted_loyalty', ascending=False).head(10))
-        print("\n")
 
-        # ЗАДАЧА 10: Подготовка финального датасета
-        print("--- Задача 10: Финальный датасет ---")
-        # Сохраняем датасет в отдельный файл
-        output_file = 'dataset_ready.csv'
-        df.to_csv(output_file, index=False)
-        print(f"Финальный DataFrame со всеми новыми признаками сохранен в: {output_file}")
-
-    except FileNotFoundError:
-        print(
-            "Ошибка: Файл с исходными данными не найден. Убедитесь, что Студент 1 загрузил данные в нужную директорию.")
-    except Exception as e:
-        print(f"Произошла непредвиденная ошибка: {e}")
-
-
-if __name__ == "__main__":
-    run_feature_engineering()
